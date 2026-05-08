@@ -23,13 +23,24 @@ export class RequestLogger {
   }
 }
 
+const shellEscape = (s: string) => s.replace(/'/g, `'\\''`);
+
 function buildCurl(meta: RequestMeta): string {
   const headerFlags = Object.entries(meta.headers)
-    .map(([k, v]) => `-H '${k}: ${v}'`)
+    .map(([k, v]) => `-H '${k}: ${shellEscape(v)}'`)
     .join(' \\\n    ');
-  const base = `curl -X ${meta.method} '${meta.url}' \\\n    ${headerFlags}`;
+  const base = headerFlags.length > 0
+    ? `curl -X ${meta.method} '${shellEscape(meta.url)}' \\\n    ${headerFlags}`
+    : `curl -X ${meta.method} '${shellEscape(meta.url)}'`;
   if (meta.body !== undefined) {
-    return `${base} \\\n    -H 'Content-Type: application/json' \\\n    -d '${JSON.stringify(meta.body)}'`;
+    const parts = [base];
+    const ctAlreadySet = Object.keys(meta.headers)
+      .some(k => k.toLowerCase() === 'content-type');
+    if (!ctAlreadySet) {
+      parts.push(`-H 'Content-Type: application/json'`);
+    }
+    parts.push(`-d '${shellEscape(JSON.stringify(meta.body))}'`);
+    return parts.join(' \\\n    ');
   }
   return base;
 }
