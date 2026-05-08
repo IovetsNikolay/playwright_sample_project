@@ -43,3 +43,11 @@ export type RequestConfig = {
   assertion: StatusAssertion;
   pollConfig?: PollConfig;
 };
+
+export type RequestMeta = {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body?: unknown;
+  startedAt: number;
+};
