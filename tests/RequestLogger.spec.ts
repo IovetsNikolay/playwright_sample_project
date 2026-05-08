@@ -70,3 +70,37 @@ test('RequestLogger.logFailure curl omits -d flag when no body', () => {
     restore();
   }
 });
+
+test('RequestLogger.logFailure curl does not duplicate Content-Type when already in headers', () => {
+  const { lines, restore } = captureLogs('error');
+  try {
+    const meta: RequestMeta = {
+      ...baseMeta(),
+      method: 'POST',
+      url: 'https://api.example.com/products',
+      headers: { 'Content-Type': 'application/json' },
+      body: { x: 1 },
+    };
+    RequestLogger.logFailure(meta, 400, '');
+    const output = lines.join('\n');
+    const matches = (output.match(/-H 'Content-Type:/g) ?? []).length;
+    expect(matches).toBe(1);
+  } finally {
+    restore();
+  }
+});
+
+test('RequestLogger.logFailure curl shell-escapes single quotes in URL', () => {
+  const { lines, restore } = captureLogs('error');
+  try {
+    const meta: RequestMeta = {
+      ...baseMeta(),
+      url: "https://api.example.com/search?q=it's",
+    };
+    RequestLogger.logFailure(meta, 400, 'not found');
+    const output = lines.join('\n');
+    expect(output).toContain("curl -X GET 'https://api.example.com/search?q=it'\\''s'");
+  } finally {
+    restore();
+  }
+});
