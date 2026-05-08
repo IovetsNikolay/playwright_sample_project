@@ -143,11 +143,11 @@ export class ApiClient implements IApiContext {
     const ctx = this.apiContext!;
     const response = await (() => {
       switch (method) {
-        case 'get':    return ctx.get(baseUrl,    { params: options.queryParams });
+        case 'get':    return ctx.get(url);
         case 'post':   return ctx.post(baseUrl,   { data: options.body });
         case 'put':    return ctx.put(baseUrl,    { data: options.body });
         case 'patch':  return ctx.patch(baseUrl,  { data: options.body });
-        case 'delete': return ctx.delete(baseUrl, { params: options.queryParams });
+        case 'delete': return ctx.delete(url);
       }
     })();
     return { response, meta };
@@ -160,7 +160,7 @@ export class ApiClient implements IApiContext {
     if (this.config.pollConfig) return this.runPoll<T>(fn, deserialize);
     const { response, meta } = await fn();
     RequestLogger.log(meta, response.status());
-    await this.validateStatus(response, meta);
+    await this.validateStatus(response, meta); // throws on failure — response.json() below is never reached in that case
     return deserialize ? (await response.json()) as T : response;
   }
 
