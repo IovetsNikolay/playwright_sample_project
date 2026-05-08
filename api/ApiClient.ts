@@ -2,11 +2,20 @@ import { request as playwrightRequest, APIRequestContext, APIResponse } from 'pl
 import { expect } from '@playwright/test';
 import {
   RequestOptions, PollOptions, IApiContext,
-  StatusAssertion, PollConfig, RequestConfig,
+  StatusAssertion, PollConfig, RequestConfig, RequestMeta,
 } from './types';
 import { ProductsService } from './services/ProductsService';
 import { LoginService } from './services/LoginService';
 import { TokenResponse } from './dto/UserDto';
+import { RequestLogger } from './RequestLogger';
+
+function buildUrlWithParams(url: string, params?: Record<string, string | number | boolean>): string {
+  if (!params || Object.keys(params).length === 0) return url;
+  const qs = new URLSearchParams(
+    Object.entries(params).map(([k, v]) => [k, String(v)])
+  ).toString();
+  return `${url}?${qs}`;
+}
 
 export class ApiClient implements IApiContext {
   private email?: string;
@@ -123,47 +132,58 @@ export class ApiClient implements IApiContext {
   private async rawRequest(
     method: 'get' | 'post' | 'put' | 'patch' | 'delete',
     options: RequestOptions,
-  ): Promise<APIResponse> {
+  ): Promise<{ response: APIResponse; meta: RequestMeta }> {
     await this.ensureInitialized();
-    const url = `${this.baseURL}${options.endpoint}`;
-    switch (method) {
-      case 'get':    return this.apiContext!.get(url,    { params: options.queryParams });
-      case 'post':   return this.apiContext!.post(url,   { data: options.body });
-      case 'put':    return this.apiContext!.put(url,    { data: options.body });
-      case 'patch':  return this.apiContext!.patch(url,  { data: options.body });
-      case 'delete': return this.apiContext!.delete(url, { params: options.queryParams });
-    }
+    const startedAt = Date.now();
+    const baseUrl = `${this.baseURL}${options.endpoint}`;
+    const url = buildUrlWithParams(baseUrl, options.queryParams);
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (this.bearerToken) headers['Authorization'] = `Bearer ${this.bearerToken}`;
+    const meta: RequestMeta = { method: method.toUpperCase(), url, headers, body: options.body, startedAt };
+    const ctx = this.apiContext!;
+    const response = await (() => {
+      switch (method) {
+        case 'get':    return ctx.get(baseUrl,    { params: options.queryParams });
+        case 'post':   return ctx.post(baseUrl,   { data: options.body });
+        case 'put':    return ctx.put(baseUrl,    { data: options.body });
+        case 'patch':  return ctx.patch(baseUrl,  { data: options.body });
+        case 'delete': return ctx.delete(baseUrl, { params: options.queryParams });
+      }
+    })();
+    return { response, meta };
   }
 
   private async execute<T>(
-    fn: () => Promise<APIResponse>,
+    fn: () => Promise<{ response: APIResponse; meta: RequestMeta }>,
     deserialize?: true,
   ): Promise<APIResponse | T> {
     if (this.config.pollConfig) return this.runPoll<T>(fn, deserialize);
-    const response = await fn();
-    this.validateStatus(response);
+    const { response, meta } = await fn();
+    RequestLogger.log(meta, response.status());
+    await this.validateStatus(response, meta);
     return deserialize ? (await response.json()) as T : response;
   }
 
   private async runPoll<T>(
-    fn: () => Promise<APIResponse>,
+    fn: () => Promise<{ response: APIResponse; meta: RequestMeta }>,
     deserialize?: true,
   ): Promise<APIResponse | T> {
     const { interval, timeout, type, predicate } = this.config.pollConfig!;
     const deadline = Date.now() + timeout;
 
     while (true) {
-      const response = await fn();
+      const { response, meta } = await fn();
+      RequestLogger.log(meta, response.status());
 
       if (type === 'raw') {
         if (await predicate(response)) {
-          this.validateStatus(response);
+          await this.validateStatus(response, meta);
           return deserialize ? response.json() as T : response;
         }
       } else {
         const body = await response.json() as T;
         if (await predicate(body)) {
-          this.validateStatus(response);
+          await this.validateStatus(response, meta);
           return body;
         }
       }
@@ -173,9 +193,18 @@ export class ApiClient implements IApiContext {
     }
   }
 
-  private validateStatus(response: APIResponse): void {
+  private async validateStatus(response: APIResponse, meta: RequestMeta): Promise<void> {
     const status = response.status();
     const { assertion } = this.config;
+    const isValid = assertion.type === 'exact'
+      ? status === assertion.code
+      : status >= assertion.min && status <= assertion.max;
+
+    if (!isValid) {
+      const body = await response.text();
+      RequestLogger.logFailure(meta, status, body);
+    }
+
     if (assertion.type === 'exact') {
       expect(status, `Expected status ${assertion.code}, got ${status}`).toBe(assertion.code);
     } else {
