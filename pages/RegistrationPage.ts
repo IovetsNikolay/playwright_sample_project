@@ -1,6 +1,7 @@
 import { BasePage } from './BasePage';
 import { expect } from '@playwright/test';
 import { RegistrationDto } from '../dto/RegistrationDto';
+import { step } from 'annotations/step';
 
 export class RegistrationPage extends BasePage {
 
@@ -20,17 +21,19 @@ export class RegistrationPage extends BasePage {
     private passwordInput   = this.page.locator('input#password');
     private submitBtn       = this.page.locator('[data-test="register-submit"]');
 
+    @step()
     async expectLoaded(): Promise<void> {
         await expect(this.pageTitle).toContainText('Customer registration');
     }
 
+    @step()
     async registerUser(dto: RegistrationDto): Promise<void> {
         await this.firstNameInput.fill(dto.firstName);
         await this.lastNameInput.fill(dto.lastName);
         await this.dobInput.fill(dto.dateOfBirth);
         const availableCountries = await this.countrySelect.locator('option').allTextContents();
         console.log(`Selecting country: "${dto.country}"`);
-        console.log(`Available options: ${JSON.stringify(availableCountries)}`);
+        // console.log(`Available options: ${JSON.stringify(availableCountries)}`);
         await this.countrySelect.selectOption({ label: dto.country });
         await this.postalCodeInput.fill(dto.postalCode);
         await this.houseNumberInput.fill(dto.houseNumber);

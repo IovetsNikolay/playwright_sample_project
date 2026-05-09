@@ -16,7 +16,7 @@ export interface RegistrationDto {
 }
 
 const SUPPORTED_COUNTRIES = [
-  'United States of America (the)', 'United Kingdom', 'Germany', 'France',
+  'United States of America (the)', 'Germany', 'France',
   'Netherlands (the)', 'Belgium', 'Canada', 'Australia',
 ];
 

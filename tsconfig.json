@@ -8,8 +8,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": "."
   },
-  "include": ["api/**/*.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules"]
 }
