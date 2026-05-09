@@ -170,25 +170,32 @@ export class ApiClient implements IApiContext {
   ): Promise<APIResponse | T> {
     const { interval, timeout, type, predicate } = this.config.pollConfig!;
     const deadline = Date.now() + timeout;
+    let lastMeta!: RequestMeta;
+    let lastStatus!: number;
+    let lastBody = '';
 
     while (true) {
       const { response, meta } = await fn();
-      RequestLogger.log(meta, response.status());
+      lastMeta = meta;
+      lastStatus = response.status();
+      RequestLogger.log(meta, lastStatus);
 
       if (type === 'raw') {
+        lastBody = await response.text();
         if (await predicate(response)) {
           await this.validateStatus(response, meta);
-          return deserialize ? response.json() as T : response;
+          return deserialize ? (await response.json()) as T : response;
         }
       } else {
         const body = await response.json() as T;
+        lastBody = JSON.stringify(body);
         if (await predicate(body)) {
           await this.validateStatus(response, meta);
           return body;
         }
       }
 
-      if (Date.now() > deadline) throw new Error(`Polling timed out after ${timeout}ms`);
+      if (Date.now() > deadline) throw new ApiPollTimeoutError(lastMeta, timeout, lastStatus, lastBody);
       await new Promise<void>(resolve => setTimeout(resolve, interval));
     }
   }
