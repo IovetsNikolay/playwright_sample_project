@@ -9,14 +9,6 @@ import { TokenResponse } from './dto/UserDto';
 import { RequestLogger } from './RequestLogger';
 import { ApiStatusError, ApiPollTimeoutError } from './errors';
 
-function buildUrlWithParams(url: string, params?: Record<string, string | number | boolean>): string {
-  if (!params || Object.keys(params).length === 0) return url;
-  const qs = new URLSearchParams(
-    Object.entries(params).map(([k, v]) => [k, String(v)])
-  ).toString();
-  return `${url}?${qs}`;
-}
-
 export class ApiClient implements IApiContext {
   private email?: string;
   private password?: string;
@@ -119,6 +111,14 @@ export class ApiClient implements IApiContext {
 
   // ── Private ──────────────────────────────────────────────────────────────────
 
+  private static buildUrlWithParams(url: string, params?: Record<string, string | number | boolean>): string {
+    if (!params || Object.keys(params).length === 0) return url;
+    const qs = new URLSearchParams(
+      Object.entries(params).map(([k, v]) => [k, String(v)])
+    ).toString();
+    return `${url}?${qs}`;
+  }
+
   private clone(patch: { assertion?: StatusAssertion; pollConfig?: PollConfig }): this {
     const copy = Object.create(Object.getPrototypeOf(this)) as this;
     Object.assign(copy, this);
@@ -136,7 +136,7 @@ export class ApiClient implements IApiContext {
     await this.ensureInitialized();
     const startedAt = Date.now();
     const baseUrl = `${this.baseURL}${options.endpoint}`;
-    const url = buildUrlWithParams(baseUrl, options.queryParams);
+    const url = ApiClient.buildUrlWithParams(baseUrl, options.queryParams);
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (this.bearerToken) headers['Authorization'] = `Bearer ${this.bearerToken}`;
     const meta: RequestMeta = { method: method.toUpperCase(), url, headers, body: options.body, startedAt };
