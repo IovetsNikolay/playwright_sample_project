@@ -1,5 +1,4 @@
 import { request as playwrightRequest, APIRequestContext, APIResponse } from 'playwright';
-import { expect } from '@playwright/test';
 import {
   RequestOptions, PollOptions, IApiContext,
   StatusAssertion, PollConfig, RequestConfig, RequestMeta,
@@ -8,6 +7,7 @@ import { ProductsService } from './services/ProductsService';
 import { LoginService } from './services/LoginService';
 import { TokenResponse } from './dto/UserDto';
 import { RequestLogger } from './RequestLogger';
+import { ApiStatusError, ApiPollTimeoutError } from './errors';
 
 function buildUrlWithParams(url: string, params?: Record<string, string | number | boolean>): string {
   if (!params || Object.keys(params).length === 0) return url;
@@ -201,15 +201,7 @@ export class ApiClient implements IApiContext {
       : status >= assertion.min && status <= assertion.max;
 
     if (!isValid) {
-      const body = await response.text();
-      RequestLogger.logFailure(meta, status, body);
-    }
-
-    if (assertion.type === 'exact') {
-      expect(status, `Expected status ${assertion.code}, got ${status}`).toBe(assertion.code);
-    } else {
-      expect(status, `Expected status ${assertion.min}–${assertion.max}, got ${status}`).toBeGreaterThanOrEqual(assertion.min);
-      expect(status, `Expected status ${assertion.min}–${assertion.max}, got ${status}`).toBeLessThanOrEqual(assertion.max);
+      throw new ApiStatusError(meta, status, assertion, await response.text());
     }
   }
 
